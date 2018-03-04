@@ -36,8 +36,9 @@ android {
     buildToolsVersion "26.0.2"
     defaultConfig {
         applicationId "ru.visualmath.android"
-        minSdkVersion 17
+        minSdkVersion 23
         targetSdkVersion 27
+        multiDexEnabled true
         versionCode 1
         versionName "1.0"
     }
@@ -61,11 +62,17 @@ android {
         targetCompatibility 1.8
         sourceCompatibility 1.8
     }
+    packagingOptions {
+        exclude 'org/bytedeco/javacpp/windows-x86/msvcp120.dll'
+        exclude 'org/bytedeco/javacpp/windows-x86_64/msvcp120.dll'
+        exclude 'org/bytedeco/javacpp/windows-x86/msvcr120.dll'
+        exclude 'org/bytedeco/javacpp/windows-x86_64/msvcr120.dll'
+    }
 }
 
 dependencies {
-    implementation 'com.android.support:appcompat-v7:27.0.1'
-    implementation 'com.android.support:recyclerview-v7:27.0.1'
+    implementation 'com.android.support:appcompat-v7:27.1.0'
+    implementation 'com.android.support:recyclerview-v7:27.1.0'
 
     // Gson
     implementation 'com.google.code.gson:gson:2.8.1'
@@ -123,4 +130,7 @@ dependencies {
 
     // Kotlin
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jre7:$kotlin_version"
+
+    // Handwriting View
+    implementation project(path: ':handwritingview')
 }
