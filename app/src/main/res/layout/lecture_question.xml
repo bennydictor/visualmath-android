@@ -14,6 +14,7 @@
         android:layout_marginTop="24dp"
         android:fontFamily="sans-serif"
         android:textColor="@color/colorPrimaryText"
+
         android:textSize="24sp" />
 
     <android.support.v7.widget.RecyclerView
@@ -25,13 +26,24 @@
         android:layout_marginTop="16dp"
         app:layoutManager="LinearLayoutManager" />
 
+    <tk.bennydictor.handwritingview.HandwritingView
+        android:id="@+id/handwriting"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignEnd="@id/lecture_question"
+        android:layout_alignStart="@id/lecture_question"
+        android:layout_below="@id/lecture_question"
+        android:layout_above="@id/symbolicAnswer"
+        android:layout_marginTop="16dp"
+        tools:visibility="invisible"/>
+
     <EditText
         android:id="@+id/symbolicAnswer"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_alignEnd="@+id/lecture_question"
         android:layout_alignStart="@+id/lecture_question"
-        android:layout_below="@+id/lecture_question"
+        android:layout_above="@id/answer"
         android:layout_marginTop="16dp"
         android:ems="10"
         android:inputType="textMultiLine"

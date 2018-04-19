@@ -24,6 +24,7 @@ import butterknife.Unbinder;
 import me.maximpestryakov.katexview.KatexView;
 import ru.visualmath.android.R;
 import ru.visualmath.android.api.model.Question;
+import tk.bennydictor.handwritingview.HandwritingView;
 
 public class QuestionFragment extends MvpAppCompatFragment implements QuestionView {
 
@@ -42,6 +43,9 @@ public class QuestionFragment extends MvpAppCompatFragment implements QuestionVi
 
     @BindView(R.id.lecture_answers)
     RecyclerView answersRecyclerView;
+
+    @BindView(R.id.handwriting)
+    HandwritingView handwritingView;
 
     @BindView(R.id.symbolicAnswer)
     EditText symbolicAnswer;
@@ -110,12 +114,16 @@ public class QuestionFragment extends MvpAppCompatFragment implements QuestionVi
 
         if (question.isSymbolic()) {
             answersRecyclerView.setVisibility(View.GONE);
+            handwritingView.setVisibility(View.VISIBLE);
             symbolicAnswer.setVisibility(View.VISIBLE);
+
+            handwritingView.setOnNewTextListener(text -> symbolicAnswer.getEditableText().append(text));
 
             answer.setOnClickListener(v -> presenter.onAnswer(lectureId,
                     Collections.singletonList(symbolicAnswer.getText().toString()), question.getId()));
         } else {
             answersRecyclerView.setVisibility(View.VISIBLE);
+            handwritingView.setVisibility(View.GONE);
             symbolicAnswer.setVisibility(View.GONE);
 
             answersRecyclerView.setHasFixedSize(true);
@@ -142,7 +150,7 @@ public class QuestionFragment extends MvpAppCompatFragment implements QuestionVi
 
     @Override
     public void startQuestion() {
-        answeredText.setVisibility(View.GONE);
+        answeredText.setVisibility(View.INVISIBLE);
         answer.setVisibility(View.VISIBLE);
         skip.setVisibility(View.VISIBLE);
         if (adapter != null) {
@@ -152,8 +160,8 @@ public class QuestionFragment extends MvpAppCompatFragment implements QuestionVi
 
     @Override
     public void finishQuestion() {
-        answer.setVisibility(View.GONE);
-        skip.setVisibility(View.GONE);
+        answer.setVisibility(View.INVISIBLE);
+        skip.setVisibility(View.INVISIBLE);
 
         if (blockId == null) {
             presenter.getResults(lectureId, question.getId());
@@ -163,8 +171,8 @@ public class QuestionFragment extends MvpAppCompatFragment implements QuestionVi
     @Override
     public void showAnswered() {
         answeredText.setVisibility(View.VISIBLE);
-        answer.setVisibility(View.GONE);
-        skip.setVisibility(View.GONE);
+        answer.setVisibility(View.INVISIBLE);
+        skip.setVisibility(View.INVISIBLE);
         if (adapter != null) {
             adapter.setAnswered(true);
         }

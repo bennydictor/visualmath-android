@@ -10,6 +10,7 @@ import com.google.gson.GsonBuilder;
 import io.fabric.sdk.android.Fabric;
 import ru.visualmath.android.api.VisualMathApi;
 import ru.visualmath.android.api.model.QuestionBlockSlide;
+import tk.bennydictor.handwritingview.SymbolRecognizer;
 
 public class App extends Application {
 
@@ -34,5 +35,6 @@ public class App extends Application {
                 .create();
 
         VisualMathApi.init(this);
+        SymbolRecognizer.init(this);
     }
 }
