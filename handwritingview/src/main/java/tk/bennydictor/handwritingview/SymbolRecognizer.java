@@ -7,7 +7,6 @@ import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
-import android.graphics.Rect;
 import android.graphics.RectF;
 
 import org.deeplearning4j.nn.multilayer.MultiLayerNetwork;
@@ -16,10 +15,13 @@ import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.factory.Nd4j;
 
 import java.io.IOException;
-import java.util.Locale;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 public class SymbolRecognizer {
-    private static SymbolRecognizer symbolRecognizer;
+    private static final int BITMAP_SIZE = 28;
+    private static SymbolRecognizer instance;
     private MultiLayerNetwork ann;
 
     private static CharSequence[] symbols = {
@@ -35,18 +37,56 @@ public class SymbolRecognizer {
     }
 
     public static void init(Context context) {
-        symbolRecognizer = new SymbolRecognizer(context);
+        instance = new SymbolRecognizer(context);
     }
 
-    static SymbolRecognizer getSymbolRecognizer() {
-        return symbolRecognizer;
+    static SymbolRecognizer get() {
+        return instance;
     }
 
 
-    CharSequence recognize(Symbol symbol) {
+    private boolean pathsIntersect(Path a, Path b) {
+        Path c = new Path(a);
+        if (!c.op(b, Path.Op.INTERSECT))
+            return false;
+
+        RectF bounds = new RectF();
+        c.computeBounds(bounds, false);
+        return !(bounds.bottom == 0 && bounds.left == 0 && bounds.right == 0 && bounds.top == 0);
+    }
+
+    private boolean[][] connectivity(List<Path> paths) {
+        boolean[][] ret = new boolean[paths.size()][paths.size()];
+        for (int i = 0; i < paths.size(); ++i)
+            for (int j = 0; j < i; ++j)
+                ret[i][j] = ret[j][i] =
+                        pathsIntersect(paths.get(i), paths.get(j));
+        return ret;
+    }
+
+    private void componentsDfs(int[] components, boolean[][] graph, int v, int c) {
+        components[v] = c;
+        for (int i = 0; i < components.length; ++i)
+            if (graph[v][i] && components[i] == -1)
+                componentsDfs(components, graph, i, c);
+    }
+
+    private int components(List<Path> paths, int[] components) {
+        boolean[][] graph = connectivity(paths);
+        Arrays.fill(components, -1);
+        int curComponent = 0;
+
+        for (int i = 0; i < paths.size(); ++i)
+            if (components[i] == -1)
+                componentsDfs(components, graph, i, curComponent++);
+
+        return curComponent;
+    }
+
+    private int[] toBitmap(List<Path> paths) {
         float min_x = Float.POSITIVE_INFINITY, max_x = Float.NEGATIVE_INFINITY;
         float min_y = Float.POSITIVE_INFINITY, max_y = Float.NEGATIVE_INFINITY;
-        for (Path p : symbol.paths) {
+        for (Path p : paths) {
             RectF bounds = new RectF();
             p.computeBounds(bounds, false);
             min_x = Math.min(min_x, bounds.left);
@@ -61,16 +101,13 @@ public class SymbolRecognizer {
 
         Matrix scale = new Matrix();
         scale.postTranslate(-mid_x, -mid_y);
-        scale.postScale(28f / width, 28f / width);
-        scale.postTranslate(14, 14);
-        for (Path p : symbol.paths)
+        scale.postScale(((float) BITMAP_SIZE) / width, ((float) BITMAP_SIZE) / width);
+        scale.postTranslate(BITMAP_SIZE / 2f, BITMAP_SIZE / 2f);
+        for (Path p : paths)
             p.transform(scale);
 
-        Bitmap bitmap = Bitmap.createBitmap(28, 28, Bitmap.Config.ARGB_8888);
-
+        Bitmap bitmap = Bitmap.createBitmap(BITMAP_SIZE, BITMAP_SIZE, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
-        Rect bounds = new Rect();
-        canvas.getClipBounds(bounds);
 
         Paint paint = new Paint();
         paint.setColor(Color.BLACK);
@@ -81,21 +118,55 @@ public class SymbolRecognizer {
         paint.setStrokeJoin(Paint.Join.ROUND);
         paint.setStrokeCap(Paint.Cap.ROUND);
 
-        for (Path p : symbol.paths)
+        for (Path p : paths)
             canvas.drawPath(p, paint);
-        int[] pixels = new int[28 * 28];
-        bitmap.getPixels(pixels, 0, 28, 0, 0, 28,28);
 
-        INDArray input = Nd4j.zeros(1, 28 * 28);
-        for (int i = 0; i < 28 * 28; ++i) {
-            input.putScalar(0, i, pixels[i] == Color.BLACK ? 1 : 0);
+        int[] pixels = new int[BITMAP_SIZE * BITMAP_SIZE];
+        bitmap.getPixels(pixels, 0, BITMAP_SIZE, 0, 0, BITMAP_SIZE, BITMAP_SIZE);
+
+        for (int i = 0; i < BITMAP_SIZE * BITMAP_SIZE; ++i)
+            if (pixels[i] == Color.BLACK)
+                pixels[i] = 1;
+            else
+                pixels[i] = 0;
+
+        return pixels;
+    }
+
+    private CharSequence recognizeComponent(List<Path> paths) {
+        int[] bitmap = toBitmap(paths);
+        INDArray input = Nd4j.zeros(1, BITMAP_SIZE * BITMAP_SIZE);
+        for (int i = 0; i < BITMAP_SIZE * BITMAP_SIZE; ++i) {
+            input.putScalar(0, i, bitmap[i]);
         }
 
         INDArray output = ann.output(input);
         int max_idx = 0;
-        for (int i = 0; i < 10; ++i)
+        for (int i = 0; i < symbols.length; ++i)
             if (output.getDouble(0, i) > output.getDouble(0, max_idx))
                 max_idx = i;
+
         return symbols[max_idx];
+    }
+
+    CharSequence recognize(List<Path> paths) {
+        int[] components = new int[paths.size()];
+        int componentsCount = components(paths, components);
+
+        CharSequence[] recognized = new CharSequence[componentsCount];
+
+        for (int compId = 0; compId < componentsCount; ++compId) {
+            List<Path> component = new ArrayList<>();
+            for (int i = 0; i < paths.size(); ++i)
+                if (components[i] == compId)
+                    component.add(paths.get(i));
+            recognized[compId] = recognizeComponent(component);
+        }
+
+        StringBuilder ret = new StringBuilder();
+        for (CharSequence cs : recognized)
+            ret.append(cs);
+
+        return ret.toString();
     }
 }

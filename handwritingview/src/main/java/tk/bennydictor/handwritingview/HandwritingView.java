@@ -7,7 +7,6 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.os.CountDownTimer;
 import android.util.AttributeSet;
-import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 
@@ -18,7 +17,7 @@ public class HandwritingView extends View {
     public static final int COUNTDOWN = 1000;
 
     private Paint paint;
-    private Symbol curSymbol;
+    private PathSet curPathSet;
     private CountDownTimer timer;
     private OnNewTextListener listener;
 
@@ -37,7 +36,7 @@ public class HandwritingView extends View {
         paint.setStrokeJoin(Paint.Join.ROUND);
         paint.setStrokeCap(Paint.Cap.ROUND);
 
-        curSymbol = null;
+        curPathSet = null;
         final HandwritingView self = this;
         timer = new CountDownTimer(COUNTDOWN, COUNTDOWN) {
             @Override
@@ -53,17 +52,17 @@ public class HandwritingView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         canvas.drawColor(BG_COLOR);
-        if (curSymbol != null) {
-            for (Path p : curSymbol.paths) {
+        if (curPathSet != null) {
+            for (Path p : curPathSet.paths) {
                 canvas.drawPath(p, paint);
             }
         }
     }
 
     public void onTimeout() {
-        CharSequence text = SymbolRecognizer.getSymbolRecognizer().recognize(curSymbol);
+        CharSequence text = SymbolRecognizer.get().recognize(curPathSet.paths);
         listener.onNewText(text);
-        curSymbol = null;
+        curPathSet = null;
         invalidate();
     }
 
@@ -73,24 +72,23 @@ public class HandwritingView extends View {
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        Log.d("handwriting", "touch");
         float x = event.getX();
         float y = event.getY();
 
         switch(event.getAction()) {
             case MotionEvent.ACTION_DOWN:
-                if (curSymbol == null) {
-                    curSymbol = new Symbol();
+                if (curPathSet == null) {
+                    curPathSet = new PathSet();
                 }
-                curSymbol.newPath();
-                curSymbol.moveTo(x, y);
+                curPathSet.newPath();
+                curPathSet.moveTo(x, y);
                 timer.cancel();
                 break;
             case MotionEvent.ACTION_MOVE:
-                curSymbol.quadTo(x, y);
+                curPathSet.quadTo(x, y);
                 break;
             case MotionEvent.ACTION_UP:
-                curSymbol.finish();
+                curPathSet.finish();
                 timer.start();
                 break;
         }

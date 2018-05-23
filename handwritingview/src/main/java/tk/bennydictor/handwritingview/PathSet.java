@@ -3,11 +3,11 @@ package tk.bennydictor.handwritingview;
 import android.graphics.Path;
 import java.util.ArrayList;
 
-class Symbol {
+class PathSet {
     ArrayList<Path> paths;
     private float lastX, lastY;
 
-    Symbol() {
+    PathSet() {
         paths = new ArrayList<>();
     }
 
