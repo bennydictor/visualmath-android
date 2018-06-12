@@ -15,22 +15,27 @@ import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.factory.Nd4j;
 
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Scanner;
 
 public class SymbolRecognizer {
-    private static final int BITMAP_SIZE = 28;
+    private static final int BITMAP_SIZE = 50;
     private static SymbolRecognizer instance;
     private MultiLayerNetwork ann;
 
-    private static CharSequence[] symbols = {
-            "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"
-    };
+    private static List<CharSequence> symbols;
 
     private SymbolRecognizer(Context context) {
         try {
             ann = ModelSerializer.restoreMultiLayerNetwork(context.getResources().openRawResource(R.raw.ann));
+            symbols = new ArrayList<>();
+            Scanner scanner = new Scanner(context.getResources().openRawResource(R.raw.ann_charmap));
+            while (scanner.hasNextLine()) {
+                symbols.add(scanner.nextLine());
+            }
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -142,11 +147,11 @@ public class SymbolRecognizer {
 
         INDArray output = ann.output(input);
         int max_idx = 0;
-        for (int i = 0; i < symbols.length; ++i)
+        for (int i = 0; i < symbols.size(); ++i)
             if (output.getDouble(0, i) > output.getDouble(0, max_idx))
                 max_idx = i;
 
-        return symbols[max_idx];
+        return symbols.get(max_idx);
     }
 
     CharSequence recognize(List<Path> paths) {
