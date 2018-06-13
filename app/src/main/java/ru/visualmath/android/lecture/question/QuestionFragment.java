@@ -20,6 +20,7 @@ import java.util.List;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
+import butterknife.OnTextChanged;
 import butterknife.Unbinder;
 import me.maximpestryakov.katexview.KatexView;
 import ru.visualmath.android.R;
@@ -50,6 +51,9 @@ public class QuestionFragment extends MvpAppCompatFragment implements QuestionVi
     @BindView(R.id.symbolicAnswer)
     EditText symbolicAnswer;
 
+    @BindView(R.id.symbolicAnswerPreview)
+    KatexView symbolicAnswerPreview;
+
     @BindView(R.id.skip)
     Button skip;
 
@@ -65,6 +69,11 @@ public class QuestionFragment extends MvpAppCompatFragment implements QuestionVi
     private boolean isStarted;
     private String blockId;
     private QuestionAdapter adapter;
+
+    @OnTextChanged(R.id.symbolicAnswer)
+    void onSymbolicAnswerChange(CharSequence text, int start, int count, int after) {
+        symbolicAnswerPreview.setText("$$" + text.toString() + "$$");
+    }
 
     public static QuestionFragment newInstance(String lectureId, Question question, boolean isStarted) {
         Bundle args = new Bundle();
@@ -83,7 +92,6 @@ public class QuestionFragment extends MvpAppCompatFragment implements QuestionVi
         args.putParcelable(ARGUMENT_QUESTION, question);
         args.putBoolean(ARGUMENT_IS_STARTED, true);
         args.putString(ARGUMENT_BLOCK_ID, blockId);
-
 
         QuestionFragment fragment = new QuestionFragment();
         fragment.setArguments(args);
@@ -116,8 +124,11 @@ public class QuestionFragment extends MvpAppCompatFragment implements QuestionVi
             answersRecyclerView.setVisibility(View.GONE);
             handwritingView.setVisibility(View.VISIBLE);
             symbolicAnswer.setVisibility(View.VISIBLE);
+            symbolicAnswerPreview.setVisibility(View.VISIBLE);
 
-            handwritingView.setOnNewTextListener(text -> symbolicAnswer.getEditableText().append(text));
+            handwritingView.setOnNewTextListener(text -> {
+                symbolicAnswer.getEditableText().append(text);
+            });
 
             answer.setOnClickListener(v -> presenter.onAnswer(lectureId,
                     Collections.singletonList(symbolicAnswer.getText().toString()), question.getId()));
@@ -125,6 +136,7 @@ public class QuestionFragment extends MvpAppCompatFragment implements QuestionVi
             answersRecyclerView.setVisibility(View.VISIBLE);
             handwritingView.setVisibility(View.GONE);
             symbolicAnswer.setVisibility(View.GONE);
+            symbolicAnswerPreview.setVisibility(View.GONE);
 
             answersRecyclerView.setHasFixedSize(true);
             adapter = new QuestionAdapter(question.getAnswers(), question.isMultiple());
