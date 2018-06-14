@@ -14,6 +14,7 @@ import android.widget.TextView;
 import com.arellomobile.mvp.MvpAppCompatFragment;
 import com.arellomobile.mvp.presenter.InjectPresenter;
 
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -127,7 +128,17 @@ public class QuestionFragment extends MvpAppCompatFragment implements QuestionVi
             symbolicAnswerPreview.setVisibility(View.VISIBLE);
 
             handwritingView.setOnNewTextListener(text -> {
-                symbolicAnswer.getEditableText().append(text);
+                int s1 = symbolicAnswer.getSelectionStart();
+                int s2 = symbolicAnswer.getSelectionEnd();
+                int tl = text.length();
+                CharSequence p1 = symbolicAnswer.getEditableText().subSequence(0, s1);
+                CharSequence p2 = text;
+                CharSequence p3 = symbolicAnswer.getEditableText().subSequence(s2, symbolicAnswer.getEditableText().length());
+                symbolicAnswer.getEditableText().clear();
+                symbolicAnswer.getEditableText().append(p1);
+                symbolicAnswer.getEditableText().append(p2);
+                symbolicAnswer.getEditableText().append(p3);
+                symbolicAnswer.setSelection(s1 + tl, s1 + tl);
             });
 
             answer.setOnClickListener(v -> presenter.onAnswer(lectureId,
