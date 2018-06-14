@@ -8,7 +8,10 @@ import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
+import android.graphics.Region;
+import android.util.Log;
 
+import org.apache.commons.lang3.text.StrBuilder;
 import org.deeplearning4j.nn.multilayer.MultiLayerNetwork;
 import org.deeplearning4j.util.ModelSerializer;
 import org.nd4j.linalg.api.ndarray.INDArray;
@@ -18,6 +21,10 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Deque;
 import java.util.List;
 import java.util.Scanner;
 
@@ -49,15 +56,29 @@ public class SymbolRecognizer {
         return instance;
     }
 
+    private void bitmapDfs(int[] bitmap, int i, int j) {
+        if (0 <= i && i < BITMAP_SIZE && 0 <= j && j <= BITMAP_SIZE && bitmap[i * 50 + j] == 1) {
+            bitmap[i * BITMAP_SIZE + j] = 0;
+            bitmapDfs(bitmap, i - 1, j);
+            bitmapDfs(bitmap, i + 1, j);
+            bitmapDfs(bitmap, i, j - 1);
+            bitmapDfs(bitmap, i, j + 1);
+        }
+    }
 
     private boolean pathsIntersect(Path a, Path b) {
-        Path c = new Path(a);
-        if (!c.op(b, Path.Op.INTERSECT))
-            return false;
-
-        RectF bounds = new RectF();
-        c.computeBounds(bounds, false);
-        return !(bounds.bottom == 0 && bounds.left == 0 && bounds.right == 0 && bounds.top == 0);
+        ArrayList<Path> list = new ArrayList<>();
+        list.add(a);
+        list.add(b);
+        int[] bitmap = toBitmap(list);
+        int count = 0;
+        for (int i = 0; i < BITMAP_SIZE * BITMAP_SIZE; ++i) {
+            if (bitmap[i] == 1) {
+                ++count;
+                bitmapDfs(bitmap, i / 50, i % 50);
+            }
+        }
+        return count == 1;
     }
 
     private boolean[][] connectivity(List<Path> paths) {
@@ -108,8 +129,13 @@ public class SymbolRecognizer {
         scale.postTranslate(-mid_x, -mid_y);
         scale.postScale(((float) BITMAP_SIZE) / width, ((float) BITMAP_SIZE) / width);
         scale.postTranslate(BITMAP_SIZE / 2f, BITMAP_SIZE / 2f);
-        for (Path p : paths)
-            p.transform(scale);
+
+        List<Path> scaled = new ArrayList<>();
+        for (Path p : paths) {
+            Path s = new Path(p);
+            s.transform(scale);
+            scaled.add(s);
+        }
 
         Bitmap bitmap = Bitmap.createBitmap(BITMAP_SIZE, BITMAP_SIZE, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
@@ -123,23 +149,26 @@ public class SymbolRecognizer {
         paint.setStrokeJoin(Paint.Join.ROUND);
         paint.setStrokeCap(Paint.Cap.ROUND);
 
-        for (Path p : paths)
+        for (Path p : scaled)
             canvas.drawPath(p, paint);
 
         int[] pixels = new int[BITMAP_SIZE * BITMAP_SIZE];
         bitmap.getPixels(pixels, 0, BITMAP_SIZE, 0, 0, BITMAP_SIZE, BITMAP_SIZE);
 
-        for (int i = 0; i < BITMAP_SIZE * BITMAP_SIZE; ++i)
+        for (int i = 0; i < BITMAP_SIZE * BITMAP_SIZE; ++i) {
             if (pixels[i] == Color.BLACK)
                 pixels[i] = 1;
             else
                 pixels[i] = 0;
+        }
 
         return pixels;
     }
 
-    private CharSequence recognizeComponent(List<Path> paths) {
-        int[] bitmap = toBitmap(paths);
+    private CharSequence recognizeComponent(PathSet ps) {
+        if (ps.width / ps.height > 5)
+            return "-";
+        int[] bitmap = toBitmap(ps.paths);
         INDArray input = Nd4j.zeros(1, BITMAP_SIZE * BITMAP_SIZE);
         for (int i = 0; i < BITMAP_SIZE * BITMAP_SIZE; ++i) {
             input.putScalar(0, i, bitmap[i]);
@@ -154,24 +183,90 @@ public class SymbolRecognizer {
         return symbols.get(max_idx);
     }
 
+    private CharSequence arrangeExpr(List<PathSet> symbols) {
+        StringBuilder ret = new StringBuilder();
+        for (int i = 0; i < symbols.size();) {
+            PathSet ps = symbols.get(i);
+            if (ps.text.equals("-")) {
+                List<PathSet> above = new ArrayList<>();
+                List<PathSet> below = new ArrayList<>();
+                int j;
+                for (j = i + 1; j < symbols.size() && ps.minx < symbols.get(j).midx && symbols.get(j).midx < ps.maxx; ++j) {
+                    if (symbols.get(j).midy < ps.midy)
+                        above.add(symbols.get(j));
+                    else
+                        below.add(symbols.get(j));
+                }
+                if (above.isEmpty() || below.isEmpty()) {
+                    ret.append("-");
+                    ++i;
+                } else {
+                    CharSequence above_seq = arrangeExpr(above);
+                    CharSequence below_seq = arrangeExpr(below);
+                    ret.append("\\frac{").append(above_seq).append("}{").append(below_seq).append("}");
+                    i = j;
+                }
+            } else if (ps.text.equals("\\sqrt{}")) {
+                List<PathSet> in = new ArrayList<>();
+                int j;
+                for (j = i + 1; j < symbols.size() && symbols.get(j).midx < ps.maxx; ++j)
+                    in.add(symbols.get(j));
+                CharSequence in_seq = arrangeExpr(in);
+                ret.append("\\sqrt{").append(in_seq).append("}");
+                i = j;
+            } else {
+                List<PathSet> sub = new ArrayList<>();
+                List<PathSet> sup = new ArrayList<>();
+                int j;
+                for (j = i + 1; j < symbols.size(); ++j) {
+                    if (symbols.get(j).height * 1.5 < ps.height) {
+                        if (symbols.get(j).maxy < ps.midy - ps.height / 4) {
+                            sup.add(symbols.get(j));
+                        } else if (symbols.get(j).miny > ps.midy + ps.height / 4) {
+                            sub.add(symbols.get(j));
+                        } else
+                            break;
+                    } else
+                        break;
+                }
+                CharSequence sub_seq = arrangeExpr(sub);
+                CharSequence sup_seq = arrangeExpr(sup);
+                ret.append(ps.text);
+                if (sub.size() > 0) {
+                    ret.append("_{").append(sub_seq).append("}");
+                }
+                if (sup.size() > 0) {
+                    ret.append("^{").append(sup_seq).append("}");
+                }
+                i = j;
+            }
+        }
+        return ret.toString();
+    }
+
     CharSequence recognize(List<Path> paths) {
         int[] components = new int[paths.size()];
         int componentsCount = components(paths, components);
 
-        CharSequence[] recognized = new CharSequence[componentsCount];
+        List<PathSet> recognized = new ArrayList<>();
 
         for (int compId = 0; compId < componentsCount; ++compId) {
-            List<Path> component = new ArrayList<>();
+            PathSet cur = new PathSet();
             for (int i = 0; i < paths.size(); ++i)
                 if (components[i] == compId)
-                    component.add(paths.get(i));
-            recognized[compId] = recognizeComponent(component);
+                    cur.paths.add(paths.get(i));
+            cur.setCoords();
+            cur.text = recognizeComponent(cur);
+            recognized.add(cur);
         }
 
-        StringBuilder ret = new StringBuilder();
-        for (CharSequence cs : recognized)
-            ret.append(cs);
+        Collections.sort(recognized, new Comparator<PathSet>() {
+            @Override
+            public int compare(PathSet p1, PathSet p2) {
+                return Float.compare(p1.minx, p2.minx);
+            }
+        });
 
-        return ret.toString();
+        return arrangeExpr(recognized);
     }
 }
